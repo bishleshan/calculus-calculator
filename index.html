@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Immersive Calculus Lab</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <!-- MediaPipe dependencies bypass Vite bundler for reliability -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+  </head>
+  <body>
+    <!-- Mode Selection Screen -->
+    <div id="mode-select">
+      <h2>IMMERSIVE CALCULUS LAB</h2>
+      <p>Choose your interaction mode</p>
+      <div id="mode-buttons">
+        <button id="btn-mouse-only" class="mode-btn">
+          <span class="mode-icon">🖱️</span>
+          <span class="mode-title">MOUSE ONLY</span>
+          <span class="mode-desc">Standard mouse navigation<br>No camera required</span>
+        </button>
+        <button id="btn-hands-mouse" class="mode-btn">
+          <span class="mode-icon">✋</span>
+          <span class="mode-title">HANDS + MOUSE</span>
+          <span class="mode-desc">Hand gesture controls<br>Camera access required</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Backgrounds -->
+    <video id="vid" autoplay muted playsinline style="display:none;"></video>
+    <canvas id="bg-canvas"></canvas>
+    <canvas id="three-canvas"></canvas>
+
+    <div class="ui" id="ui-layer">
+      <!-- Top header bar -->
+      <div id="hdr">◈ IMMERSIVE CALCULUS LAB <span id="hdr-fn">Select Topic</span></div>
+      <button id="btn-explore" style="position:absolute; top:20px; right:20px; padding:6px 16px; background:rgba(0,245,255,0.1); border:1px solid var(--c); color:var(--c); font-family:inherit; cursor:pointer; font-size:11px; letter-spacing:2px; z-index:25; border-radius:4px;">OPEN THEOREM EXPLORER</button>
+      <div id="scan-line"></div>
+
+      <!-- Right: Info Panel -->
+      <div class="panel" id="info-panel" style="display:none;">
+        <div id="fn-display">Loading...</div>
+        <!-- Custom Input Area -->
+        <div style="margin-bottom:8px; display:flex; flex-direction:column; gap:4px;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <label style="font-size:9px; color:var(--c); letter-spacing:1px;">CUSTOM CALCULATOR INPUT</label>
+            <span style="font-size:9px; color:rgba(255,255,255,0.3);">Enter to apply instantly</span>
+          </div>
+          <div style="display:flex; gap:4px;">
+            <input type="text" id="custom-fn-input" placeholder="e.g. x^2 + 3*x" style="flex:1; background:rgba(0,0,0,0.4); border:1px solid var(--bd); color:#fff; font-family:inherit; padding:6px; border-radius:4px; font-size:12px; outline:none; transition:border-color 0.25s;" />
+            <button id="btn-clear-input" title="Clear" style="background:rgba(255,45,120,0.12); border:1px solid rgba(255,45,120,0.3); color:var(--m); border-radius:4px; padding:0 8px; cursor:pointer; font-family:inherit; font-size:13px;">&#x2715;</button>
+          </div>
+          <!-- Math Keyboard -->
+          <div id="math-keyboard" style="display:grid; grid-template-columns:repeat(5,1fr); gap:3px; margin-top:2px;">
+            <button class="mathkey" data-val="sin()">sin</button>
+            <button class="mathkey" data-val="cos()">cos</button>
+            <button class="mathkey" data-val="tan()">tan</button>
+            <button class="mathkey" data-val="log()">ln</button>
+            <button class="mathkey" data-val="sqrt()">&#8730;</button>
+            <button class="mathkey" data-val="exp()">e&#x02e3;</button>
+            <button class="mathkey" data-val="^">^</button>
+            <button class="mathkey" data-val="(">(  )</button>
+            <button class="mathkey" data-val="pi">&#960;</button>
+            <button class="mathkey" data-val="abs()">|x|</button>
+          </div>
+        </div>
+        <div class="calc-block">
+          <div class="clabel">Target Function</div>
+          <div class="cvalue" id="val-target">f(x)</div>
+        </div>
+        <div class="calc-block">
+          <div class="clabel">Derivative</div>
+          <div class="cvalue" id="val-deriv">Wait...</div>
+          <div class="vstatus" id="vstatus-deriv"></div>
+        </div>
+        <div class="calc-block">
+          <div class="clabel">Integral</div>
+          <div class="cvalue" id="val-integ">Wait...</div>
+          <div class="vstatus" id="vstatus-integ"></div>
+        </div>
+        <div class="calc-block">
+          <div class="clabel">Properties & Domain</div>
+          <div id="props"></div>
+        </div>
+      </div>
+
+      <!-- Bottom right: Applications Panel -->
+      <div class="panel" id="why-panel" style="display:none;">
+        <div id="why-title">WHY CALCULUS MATTERS HERE</div>
+        <div id="why-text"></div>
+      </div>
+
+      <!-- Bottom left: 2D Graph -->
+      <div class="panel" id="graph-panel" style="display:none;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <div id="graph-title">2D VISUALIZATION</div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span id="zoom-label" style="font-size:9px; letter-spacing:1px; color:rgba(0,245,255,0.5);">ZOOM 1.0&times;</span>
+            <button id="btn-zoom-reset" title="Reset Zoom" style="background:rgba(0,245,255,0.08); border:1px solid var(--bd); color:var(--c); font-family:inherit; font-size:9px; padding:2px 7px; cursor:pointer; border-radius:3px; letter-spacing:1px;">RESET</button>
+          </div>
+        </div>
+        <canvas id="gc" height="170"></canvas>
+        <div class="legend">
+          <div class="leg"><div class="leg-line" style="background:var(--c)"></div>f(x)</div>
+          <div class="leg"><div class="leg-line" style="background:var(--m)"></div>f′(x)</div>
+          <div class="leg"><div class="leg-line" style="background:var(--g);opacity:0.7"></div>∫f dx</div>
+        </div>
+      </div>
+
+      <!-- Left: Module & Topic Navigator -->
+      <div class="panel" id="module-nav" style="display:none;">
+        <div id="mod-title">MODULE 1: PRECALCULUS</div>
+        <div id="mod-list"></div>
+      </div>
+
+      <!-- View Toggle: 2D / 3D switch (positioned top-center for hand gesture access) -->
+      <div id="view-toggle" class="view-toggle-group" style="display:none;">
+        <button id="btn-view-2d" class="view-toggle-btn" title="2D Graph Main View">&#x1F4C8; 2D</button>
+        <button id="btn-view-3d" class="view-toggle-btn active" title="3D Graph Main View">&#x1F4CA; 3D</button>
+      </div>
+
+      <!-- Top left: Gesture Guide -->
+      <div class="panel" id="gest-guide" style="display:none;">
+        <div class="grow"><span class="gico">✋</span><span>Open palm → menu</span></div>
+        <div class="grow"><span class="gico">☝️</span><span>Index finger → cursor</span></div>
+        <div class="grow"><span class="gico">🤏</span><span>Pinch → select</span></div>
+        <div class="grow"><span class="gico">✊</span><span>Fist → close</span></div>
+      </div>
+
+      <!-- Center Elements -->
+      <div class="panel" id="theorem-explorer" style="display:none; position:absolute; top:80px; left:250px; width:400px; padding:20px; z-index:30;">
+        <div id="te-title" style="color:var(--p); font-size:12px; letter-spacing:4px; margin-bottom:12px;">THEOREM EXPLORER</div>
+        <div id="te-content" style="font-size:11px; color:#fff; line-height:1.6; margin-bottom:15px; border-bottom:1px solid var(--bd); padding-bottom:15px;"></div>
+        <div id="te-examples" style="font-size:10px; color:var(--g); margin-bottom:10px;"></div>
+        <button id="te-close" style="padding:4px 10px; background:transparent; border:1px solid var(--bd); color:var(--c); font-family:inherit; cursor:pointer;">CLOSE</button>
+      </div>
+
+      <div id="radial-menu">
+        <div id="menu-label">SELECT<br>TOPIC</div>
+      </div>
+      <div id="surface-label"></div>
+      
+      <div id="cursor"><div id="cursor-ring"></div><div id="cursor-dot"></div></div>
+      <div id="status">INITIALIZING…</div>
+    </div>
+
+    <!-- Foreground for MediaPipe drawing -->
+    <canvas id="hand-canvas"></canvas>
+
+    <!-- 3D thumbnail label (visible in mode-2d) -->
+    <div id="three-label">3D PREVIEW &#x2022; SCROLL/DRAG TO ORBIT</div>
+
+    <!-- 2D thumbnail label (visible in mode-3d / default) -->
+    <div id="two-d-label">2D GRAPH &#x2022; SCROLL TO ZOOM</div>
+
+    <!-- 3D interaction hint (visible over background) -->
+    <div id="three-hint">SCROLL TO ZOOM &nbsp;&#x2022;&nbsp; DRAG TO ORBIT &nbsp;&#x2022;&nbsp; RIGHT-DRAG TO PAN</div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
